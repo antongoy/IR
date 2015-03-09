@@ -2,7 +2,6 @@ import re
 import argparse
 
 import numpy as np
-import pylab as pl
 
 from random import sample, shuffle
 from itertools import combinations
@@ -11,7 +10,7 @@ from scipy.cluster.hierarchy import fclusterdata
 __author__ = 'anton-goy'
 
 
-def parse_it():
+def argument_parsing():
     my_parser = argparse.ArgumentParser()
     my_parser.add_argument('general_filename', help="File containing general URLs")
     my_parser.add_argument('examined_filename', help="File containing examined URLs")
@@ -27,14 +26,17 @@ def insert_regexp(parse_url, pattern, regexp_object):
             parse_url[i] = pattern
 
 
-def generate_segment_features(url, segment_features):
+def generate_features(parsed_urls):
+    features = {}
 
-    for i, segment in enumerate(url):
+    for url in parsed_urls:
+        for i, segment in enumerate(url):
 
-        if (segment, i) in segment_features:
-            segment_features[(segment, i)] += 1
-        else:
-            segment_features[(segment, i)] = 1
+            if (segment, i) in features:
+                features[(segment, i)] += 1
+            else:
+                features[(segment, i)] = 1
+    return features
 
 
 def parse_query(parse_url, num_regexp, percent_regexp):
@@ -56,7 +58,7 @@ def parse_query(parse_url, num_regexp, percent_regexp):
         if match_object:
             url_query[i] = url_query[i][:match_object.start()] + '(%[A-Za-z0-9]{2}\+?)+'
 
-    return sorted(url_query)
+    return sorted(url_query, reverse=True)
 
 
 def generate_query_features(query, query_features):
@@ -71,21 +73,25 @@ def parse_urls(urls):
     numerical_pattern = r'[0-9]+'
     numerical_regexp = re.compile(numerical_pattern)
 
-    with_percent_pattern = r'(%[A-Za-z0-9]{2}\+?)+'
+    with_percent_pattern = r'[^/]+%[^/]+'
     with_percent_regexp = re.compile(with_percent_pattern)
 
     extension_pattern = '\.[^/?]+'
     extension_regexp = re.compile(extension_pattern)
 
-    segment_features = {}
-    query_features = {}
-    all_urls = []
+    flv_extension = '.flv'
+
+    all_parsed_urls = []
 
     for url in urls:
+        url_dict = {}
         if not extension_regexp.search(url) and url[-1] != '/':
             url += '/'
 
         parse_url = url.split('/')
+
+        if parse_url[-1].endswith(flv_extension):
+            parse_url[-1] = r'[^/]+.flv'
 
         if not parse_url[-1] == '':
             query = parse_query(parse_url, numerical_regexp, with_percent_regexp)
@@ -94,20 +100,17 @@ def parse_urls(urls):
         insert_regexp(parse_url, numerical_pattern, numerical_regexp)
         insert_regexp(parse_url, with_percent_pattern, with_percent_regexp)
 
-        all_urls.append(parse_url)
+        all_parsed_urls.append(parse_url)
 
-        generate_segment_features(parse_url, segment_features)
-        #generate_query_features(query, query_features)
-
-    return segment_features, query_features, all_urls
+    return all_parsed_urls
 
 
-def generate_dataset(all_urls, segment_features):
+def generate_dataset(all_urls, features):
     data_set = []
 
     for url in all_urls:
         feature_vector = []
-        for segment in segment_features:
+        for segment in features:
             if segment[0][1] < len(url) and url[segment[0][1]] == segment[0][0]:
                 feature_vector.append(1)
             else:
@@ -119,8 +122,8 @@ def generate_dataset(all_urls, segment_features):
 
 
 def jaccard_distance(X, Y):
-    intersect = sum([x and y for x,y in zip(X, Y)])
-    union = sum([x or y for x,y in zip(X, Y)])
+    intersect = sum([x and y for x, y in zip(X, Y)])
+    union = sum([x or y for x, y in zip(X, Y)])
 
     return 1 - intersect / union
 
@@ -133,47 +136,67 @@ def compute_diameter(cluster):
 
 
 def main():
-    general_filename, examined_filename = parse_it()
+    general_filename, examined_filename = argument_parsing()
 
-    n_urls = 1000
+    n_urls = 2000
     host_length = 20
-    n_features = 70
+    n_features = 100
 
     with open(general_filename, 'r') as general_file, open(examined_filename, 'r') as examined_file:
-        urls = sample([line[host_length:].rstrip('\n') for line in general_file], n_urls // 2) + \
-               sample([line[host_length:].rstrip('\n') for line in examined_file], n_urls // 2)
-        shuffle(urls)
+        print("Open files...")
 
-        segment_features, query_features, all_parse_urls = parse_urls(urls)
-        segment_features = segment_features.items()
-        segment_features = sorted(segment_features, key=lambda x: x[1], reverse=True)
-        segment_features = segment_features[:n_features]
+        general_urls = [line[host_length:].rstrip('\n') for line in general_file]
+        examined_urls = [line[host_length:].rstrip('\n') for line in examined_file]
 
-        data_set = generate_dataset(all_parse_urls, segment_features)
+        print("Start of parsing general urls...")
+        general_parsed_urls = parse_urls(general_urls)
 
-        all_parse_urls = np.array(all_parse_urls)
-        urls = np.array(urls)
+        print("Start of parsing examined urls")
+        examined_parsed_urls = parse_urls(examined_urls)
 
-        clusters = fclusterdata(data_set, t=0.27, metric='jaccard', method='single', criterion='distance')
+        clustered_parsed_urls = sample(general_parsed_urls, n_urls // 2) + \
+                                sample(examined_parsed_urls, n_urls // 2)
+        shuffle(clustered_parsed_urls)
+
+        print("Generate features...")
+        all_features = generate_features(clustered_parsed_urls)
+
+        print("Sort features...")
+        all_features = sorted(all_features.items(), key=lambda x: x[1], reverse=True)[:n_features]
+
+        all_parsed_urls = sample(general_parsed_urls + examined_parsed_urls, 4000)
+        shuffle(all_parsed_urls)
+
+        print("Generate dataset...")
+        data_set = generate_dataset(all_parsed_urls, all_features)
+
+        all_parsed_urls = np.array(all_parsed_urls)
+
+        print("Start clustering...")
+        clusters = fclusterdata(data_set, t=0.2, metric='jaccard', method='single', criterion='distance')
         cluster_labels = list(set(clusters))
 
-        for cluster_label in cluster_labels:
-            cluster = all_parse_urls[clusters == cluster_label]
+        regexps = []
 
-            print(cluster, end='\n\n')
+        for cluster_label in cluster_labels:
+            cluster = all_parsed_urls[clusters == cluster_label]
+
+            print(all_parsed_urls[clusters == cluster_label], end='\n\n')
 
             length = len(max(cluster, key=lambda s: len(s)))
 
+            pattern = '/'
+
             for i in range(length):
                 segments = list(set([url[i] for url in cluster if len(url) - 1 >= i]))
-                print(segments)
+                if len(segments) > 1:
+                    pattern += r'[^/]+/'
+                else:
+                    pattern += segments[0] + '/'
+            regexps.append(pattern)
 
-
-
-
-
-
-
+        #for r in regexps:
+        #    print(r)
 
 
 if __name__ == '__main__':
