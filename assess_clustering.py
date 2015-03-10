@@ -21,6 +21,7 @@ def argument_parse():
 
 def get_purity(regexps, general_urls, examined_urls):
     purity = 0
+    total = 0
 
     for r in regexps:
         n1 = 0
@@ -31,16 +32,18 @@ def get_purity(regexps, general_urls, examined_urls):
         for url in general_urls:
             if r_obj.match(url):
                 n1 += 1
+                total += 1
         print(r, end=" GENERAL :: %d\n" % n1)
 
         for url in examined_urls:
             if r_obj.match(url):
                 n2 += 1
+                total += 1
         print(r, end=" EXAMINED :: %d\n\n" % n2)
 
         purity += max(n1, n2)
 
-    return purity / 2000
+    return purity / total
 
 
 def main():
@@ -56,8 +59,8 @@ def main():
         all_examined_urls = [line.rstrip('\n') for line in examined_file]
         regexps = [line.rstrip('\n') for line in regexp_file]
 
-        m = 20
-        n = 1000
+        m = 10
+        n = 2000
         final_purity = 0
 
         bootstrap = [(sample(all_general_urls, n), sample(all_examined_urls, n)) for i in range(m)]
