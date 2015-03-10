@@ -30,16 +30,16 @@ def get_purity(regexps, general_urls, examined_urls):
         r_obj = re.compile(r)
 
         for url in general_urls:
-            if r_obj.match(url):
+            if r_obj.fullmatch(url):
                 n1 += 1
                 total += 1
-        print(r, end=" GENERAL :: %d\n" % n1)
+        #print(r, end=" GENERAL :: %d\n" % n1)
 
         for url in examined_urls:
-            if r_obj.match(url):
+            if r_obj.fullmatch(url):
                 n2 += 1
                 total += 1
-        print(r, end=" EXAMINED :: %d\n\n" % n2)
+        #print(r, end=" EXAMINED :: %d\n\n" % n2)
 
         purity += max(n1, n2)
 
