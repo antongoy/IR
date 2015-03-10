@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 
 from random import sample, shuffle
-from itertools import combinations
+from itertools import combinations, permutations
 from scipy.cluster.hierarchy import fclusterdata
 
 __author__ = 'anton-goy'
@@ -30,12 +30,18 @@ def generate_features(parsed_urls):
     features = {}
 
     for url in parsed_urls:
-        for i, segment in enumerate(url):
-
-            if (segment, i) in features:
-                features[(segment, i)] += 1
+        for i, segment in enumerate(url['pos_feature']):
+            if ('pos_feature', segment, i) in features:
+                features[('pos_feature', segment, i)] += 1
             else:
-                features[(segment, i)] = 1
+                features[('pos_feature', segment, i)] = 1
+
+        for i, segment in enumerate(url['query_feature']):
+            if ('query_feature', segment) in features:
+                features[('query_feature', segment)] += 1
+            else:
+                features[('query_feature', segment)] = 1
+
     return features
 
 
@@ -56,7 +62,7 @@ def parse_query(parse_url, num_regexp, percent_regexp):
 
         match_object = percent_regexp.search(param)
         if match_object:
-            url_query[i] = url_query[i][:match_object.start()] + '(%[A-Za-z0-9]{2}\+?)+'
+            url_query[i] = url_query[i][:match_object.start()] + '[^/]*%[^/]+'
 
     return sorted(url_query, reverse=True)
 
@@ -73,7 +79,7 @@ def parse_urls(urls):
     numerical_pattern = r'[0-9]+'
     numerical_regexp = re.compile(numerical_pattern)
 
-    with_percent_pattern = r'[^/]+%[^/]+'
+    with_percent_pattern = r'[^/=]*%[^/]+'
     with_percent_regexp = re.compile(with_percent_pattern)
 
     extension_pattern = '\.[^/?]+'
@@ -95,12 +101,16 @@ def parse_urls(urls):
 
         if not parse_url[-1] == '':
             query = parse_query(parse_url, numerical_regexp, with_percent_regexp)
-            parse_url += query
+            url_dict['query_feature'] = query
+        else:
+            url_dict['query_feature'] = ['']
 
         insert_regexp(parse_url, numerical_pattern, numerical_regexp)
         insert_regexp(parse_url, with_percent_pattern, with_percent_regexp)
 
-        all_parsed_urls.append(parse_url)
+        url_dict['pos_feature'] = parse_url
+
+        all_parsed_urls.append(url_dict)
 
     return all_parsed_urls
 
@@ -110,11 +120,17 @@ def generate_dataset(all_urls, features):
 
     for url in all_urls:
         feature_vector = []
-        for segment in features:
-            if segment[0][1] < len(url) and url[segment[0][1]] == segment[0][0]:
-                feature_vector.append(1)
-            else:
-                feature_vector.append(0)
+        for feature in features:
+            if feature[0][0] == 'pos_feature':
+                if feature[0][2] < len(url) and url['pos_feature'][feature[0][2]] == feature[0][1]:
+                    feature_vector.append(1)
+                else:
+                    feature_vector.append(0)
+            if feature[0][0] == 'query_feature':
+                if feature[0][1] in url['query_feature']:
+                    feature_vector.append(1)
+                else:
+                    feature_vector.append(0)
 
         data_set.append(feature_vector)
 
@@ -140,7 +156,7 @@ def main():
 
     n_urls = 2000
     host_length = 20
-    n_features = 100
+    n_features = 150
 
     with open(general_filename, 'r') as general_file, open(examined_filename, 'r') as examined_file:
         print("Open files...")
@@ -151,7 +167,7 @@ def main():
         print("Start of parsing general urls...")
         general_parsed_urls = parse_urls(general_urls)
 
-        print("Start of parsing examined urls")
+        print("Start of parsing examined urls...")
         examined_parsed_urls = parse_urls(examined_urls)
 
         clustered_parsed_urls = sample(general_parsed_urls, n_urls // 2) + \
@@ -164,7 +180,7 @@ def main():
         print("Sort features...")
         all_features = sorted(all_features.items(), key=lambda x: x[1], reverse=True)[:n_features]
 
-        all_parsed_urls = sample(general_parsed_urls + examined_parsed_urls, 4000)
+        all_parsed_urls = sample(general_parsed_urls, 2000) + sample(examined_parsed_urls, 2000)
         shuffle(all_parsed_urls)
 
         print("Generate dataset...")
@@ -178,25 +194,47 @@ def main():
 
         regexps = []
 
+        #print(cluster_labels)
+
         for cluster_label in cluster_labels:
+
             cluster = all_parsed_urls[clusters == cluster_label]
-
-            print(all_parsed_urls[clusters == cluster_label], end='\n\n')
-
-            length = len(max(cluster, key=lambda s: len(s)))
-
-            pattern = '/'
+            #print(all_parsed_urls[clusters == cluster_label], end='\n\n')
+            length = len(max(cluster, key=lambda s: len(s['pos_feature']))['pos_feature'])
+            #print(length)
+            pattern = 'http://kinopoisk.ru/'
 
             for i in range(length):
-                segments = list(set([url[i] for url in cluster if len(url) - 1 >= i]))
-                if len(segments) > 1:
-                    pattern += r'[^/]+/'
-                else:
-                    pattern += segments[0] + '/'
-            regexps.append(pattern)
+                segments = list(set([url['pos_feature'][i] if len(url['pos_feature']) - 1 >= i else '' for url in cluster]))
 
-        #for r in regexps:
-        #    print(r)
+                if len(segments) > 1:
+                    if '' in segments and len(segments) > 2:
+                        pattern += r'[^/]*/?'
+                    if '' in segments and len(segments) == 2:
+                        j = segments.index('')
+                        pattern += '(' + segments[1 - j] + '/)?'
+                    if not '' in segments:
+                        pattern += r'[^/]+/'
+                else:
+                    #if not segments[0] == '' and not segments[0].endswith('\.[^/?]+'):
+                    pattern += segments[0] + '/'
+
+            params = list(set([param for url in cluster for param in url['query_feature']]))
+
+            if not '' in params:
+                pattern = pattern[:-1]
+                pattern += '?'
+                for p in params:
+                    pattern += p + '&'
+
+                pattern = pattern[:-1]
+
+            regexps.append(pattern + '\n')
+
+        with open('regexps.txt', 'w') as output:
+            output.writelines(regexps)
+
+
 
 
 if __name__ == '__main__':
