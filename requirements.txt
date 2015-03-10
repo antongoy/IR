@@ -1,0 +1,12 @@
+Requirements:
+    1) Python 3.4
+    2) Numpy 1.8.2
+    3) Scipy 0.13.3
+
+Program #1: prioritization.py
+    Input: <general_urls_file> <examined_urls_file>
+    Output: regexps.txt
+
+Program #2: assess_clustering.py
+    Input: <general_urls_file> <examined_urls_file> <regexps_file>
+    Output: purity
