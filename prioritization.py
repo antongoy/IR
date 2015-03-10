@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 
 from random import sample, shuffle
-from itertools import combinations, permutations
+from itertools import permutations
 from scipy.cluster.hierarchy import fclusterdata
 
 __author__ = 'anton-goy'
@@ -22,7 +22,7 @@ def argument_parsing():
 
 def insert_regexp(parse_url, pattern, regexp_object):
     for i, segment in enumerate(parse_url):
-        if regexp_object.match(segment):
+        if regexp_object.fullmatch(segment):
             parse_url[i] = pattern
 
 
@@ -85,6 +85,9 @@ def parse_urls(urls):
     extension_pattern = '\.[^/?]+'
     extension_regexp = re.compile(extension_pattern)
 
+    date_pattern = r'\d{4}\-\d{2}\-\d{2}'
+    date_regexp = re.compile(date_pattern)
+
     flv_extension = '.flv'
 
     all_parsed_urls = []
@@ -105,6 +108,7 @@ def parse_urls(urls):
         else:
             url_dict['query_feature'] = ['']
 
+        insert_regexp(parse_url, date_pattern, date_regexp)
         insert_regexp(parse_url, numerical_pattern, numerical_regexp)
         insert_regexp(parse_url, with_percent_pattern, with_percent_regexp)
 
@@ -137,20 +141,6 @@ def generate_dataset(all_urls, features):
     return np.array(data_set, dtype=np.int64)
 
 
-def jaccard_distance(X, Y):
-    intersect = sum([x and y for x, y in zip(X, Y)])
-    union = sum([x or y for x, y in zip(X, Y)])
-
-    return 1 - intersect / union
-
-
-def compute_diameter(cluster):
-    if len(cluster) == 1:
-        return 0
-
-    return max([jaccard_distance(x, y) for x, y in combinations(cluster, 2)])
-
-
 def main():
     general_filename, examined_filename = argument_parsing()
 
@@ -180,7 +170,7 @@ def main():
         print("Sort features...")
         all_features = sorted(all_features.items(), key=lambda x: x[1], reverse=True)[:n_features]
 
-        all_parsed_urls = sample(general_parsed_urls, 2000) + sample(examined_parsed_urls, 2000)
+        all_parsed_urls = sample(general_parsed_urls, 1000) + sample(examined_parsed_urls, 1000)
         shuffle(all_parsed_urls)
 
         print("Generate dataset...")
@@ -194,19 +184,14 @@ def main():
 
         regexps = []
 
-        #print(cluster_labels)
-
         for cluster_label in cluster_labels:
 
             cluster = all_parsed_urls[clusters == cluster_label]
-            #print(all_parsed_urls[clusters == cluster_label], end='\n\n')
             length = len(max(cluster, key=lambda s: len(s['pos_feature']))['pos_feature'])
-            #print(length)
             pattern = 'http://kinopoisk.ru/'
 
             for i in range(length):
                 segments = list(set([url['pos_feature'][i] if len(url['pos_feature']) - 1 >= i else '' for url in cluster]))
-
                 if len(segments) > 1:
                     if '' in segments and len(segments) > 2:
                         pattern += r'[^/]*/?'
@@ -216,25 +201,33 @@ def main():
                     if not '' in segments:
                         pattern += r'[^/]+/'
                 else:
-                    #if not segments[0] == '' and not segments[0].endswith('\.[^/?]+'):
-                    pattern += segments[0] + '/'
+                    if not(i == length - 1 and segments[0] == ''):
+                        pattern += segments[0] + '/'
 
             params = list(set([param for url in cluster for param in url['query_feature']]))
 
             if not '' in params:
                 pattern = pattern[:-1]
-                pattern += '?'
-                for p in params:
-                    pattern += p + '&'
+                pattern += '\?'
 
-                pattern = pattern[:-1]
+                if len(params) > 1:
+                    r = '('
+                    for s in list(permutations(params, len(params))):
+                        t = ''
+                        for q in s:
+                            t += q + '&'
+                        t = t[:-1]
+                        r += t + '|'
+                    r = r[:-1] + ')'
+                    pattern += r
+                else:
+                    pattern += params[0]
 
             regexps.append(pattern + '\n')
 
         with open('regexps.txt', 'w') as output:
             output.writelines(regexps)
-
-
+            output.flush()
 
 
 if __name__ == '__main__':
