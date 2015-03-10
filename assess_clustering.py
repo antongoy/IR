@@ -27,13 +27,16 @@ def get_purity(regexps, general_urls, examined_urls):
         n2 = 0
 
         r_obj = re.compile(r)
+
         for url in general_urls:
             if r_obj.match(url):
                 n1 += 1
+        print(r, end=" GENERAL :: %d\n" % n1)
 
         for url in examined_urls:
             if r_obj.match(url):
                 n2 += 1
+        print(r, end=" EXAMINED :: %d\n\n" % n2)
 
         purity += max(n1, n2)
 
@@ -48,16 +51,18 @@ def main():
          open(regexp_filename, 'r') as regexp_file:
         print("Open files...")
 
+        print("Read data...")
         all_general_urls = [line.rstrip('\n') for line in general_file]
         all_examined_urls = [line.rstrip('\n') for line in examined_file]
         regexps = [line.rstrip('\n') for line in regexp_file]
 
-        m = 8
+        m = 20
         n = 1000
         final_purity = 0
 
         bootstrap = [(sample(all_general_urls, n), sample(all_examined_urls, n)) for i in range(m)]
 
+        print("Compute purity...")
         for general_urls, examined_urls in bootstrap:
             final_purity += get_purity(regexps, general_urls, examined_urls)
 
