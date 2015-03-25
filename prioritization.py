@@ -178,12 +178,12 @@ def generate_cluster_regexp(clusters, all_parsed_urls, host):
                     pattern += r'[^/]*/?'
                 if '' in segments and len(segments) == 2:
                     j = segments.index('')
-                    if re.findall('[^/]+\..+$', segments[1-j]):
+                    if re.search('[^/]+\.[^/]+$', segments[1-j]):
                         pattern += '(' + segments[1 - j] + ')?'
                     else:
                         pattern += '(' + segments[1 - j] + '/)?'
                 if not '' in segments:
-                    withend = [1 for item in segments if re.findall('[^/]+\..+$', item)]
+                    withend = len([1 for item in segments if re.search('[^/]+\.[^/]+$', item)])
                     if withend == len(segments):
                         pattern += r'[^/]+'
                     elif withend != 0:
@@ -192,7 +192,7 @@ def generate_cluster_regexp(clusters, all_parsed_urls, host):
                         pattern += r'[^/]+/'
             else:
                 if not(i == length - 1 and segments[0] == ''):
-                    if re.findall('[^/]+\..+$', segments[0]):
+                    if re.findall('[^/]+\.[^/]+$', segments[0]):
                         pattern += segments[0]
                     else:
                         pattern += segments[0] + '/'
@@ -250,7 +250,7 @@ def main():
         all_parsed_urls = np.array(all_parsed_urls)
 
         print("Start clustering...")
-        clusters = fclusterdata(data_set, t=0.2, metric='jaccard', method='complete', criterion='distance')
+        clusters = fclusterdata(data_set, t=0.3, metric='jaccard', method='complete', criterion='distance')
 
         print("Generate regexps...")
         regexps = generate_cluster_regexp(clusters, all_parsed_urls, host)
