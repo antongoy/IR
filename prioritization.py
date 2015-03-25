@@ -25,7 +25,7 @@ def argument_parsing():
 def insert_regexp(parse_url, pattern, regexp_object):
     for i, segment in enumerate(parse_url):
         if regexp_object.match(segment):
-            parse_url[i] = pattern[:-1]
+            parse_url[i] = pattern[1:-1]
 
 
 def generate_features(parsed_urls):
@@ -83,16 +83,16 @@ def generate_query_features(query, query_features):
 
 
 def parse_urls(urls):
-    numerical_pattern = r'[0-9]+$'
+    numerical_pattern = r'^[0-9]+$'
     numerical_regexp = re.compile(numerical_pattern)
 
-    with_percent_pattern = r'[^/=]*%[^/]+$'
+    with_percent_pattern = r'^[^/=]*%[^/]+$'
     with_percent_regexp = re.compile(with_percent_pattern)
 
     extension_pattern = '\.[^/?]+'
     extension_regexp = re.compile(extension_pattern)
 
-    date_pattern = r'\d{4}\-\d{2}\-\d{2}$'
+    date_pattern = r'^\d{4}\-\d{2}\-\d{2}$'
     date_regexp = re.compile(date_pattern)
 
     flv_extension = '.flv'
@@ -197,6 +197,9 @@ def generate_cluster_regexp(clusters, all_parsed_urls, host):
                     else:
                         pattern += segments[0] + '/'
 
+        if pattern[-1] == '/':
+            pattern += '?'
+
         params = list(set([param for url in cluster for param in url['query_feature']]))
 
         if len(params) == 1 and params[0] == '':
@@ -204,6 +207,7 @@ def generate_cluster_regexp(clusters, all_parsed_urls, host):
         else:
             regexps.append(pattern + '(\?[^&]+(&[^&]+)*)?$\n')
 
+    regexps.append(host + '.*')
     return regexps
 
 
@@ -250,7 +254,7 @@ def main():
         all_parsed_urls = np.array(all_parsed_urls)
 
         print("Start clustering...")
-        clusters = fclusterdata(data_set, t=0.3, metric='jaccard', method='complete', criterion='distance')
+        clusters = fclusterdata(data_set, t=0.36, metric='jaccard', method='complete', criterion='distance')
 
         print("Generate regexps...")
         regexps = generate_cluster_regexp(clusters, all_parsed_urls, host)
