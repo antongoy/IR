@@ -158,7 +158,7 @@ def generate_dataset(all_urls, features):
     return np.array(data_set, dtype=np.int64)
 
 
-def generate_cluster_regexp(clusters, all_parsed_urls):
+def generate_cluster_regexp(clusters, all_parsed_urls, host):
     cluster_labels = list(set(clusters))
     regexps = []
 
@@ -166,7 +166,7 @@ def generate_cluster_regexp(clusters, all_parsed_urls):
 
         cluster = all_parsed_urls[clusters == cluster_label]
         length = len(max(cluster, key=lambda s: len(s['pos_feature']))['pos_feature'])
-        pattern = 'http://kinopoisk.ru/'
+        pattern = host
 
         for i in range(length):
             segments = list(set([url['pos_feature'][i] if len(url['pos_feature']) - 1 >= i else '' for url in cluster]))
@@ -210,14 +210,19 @@ def main():
     general_filename, examined_filename = argument_parsing()
 
     n_urls = 1000
-    host_length = 20
     n_features = 150
 
     with open(general_filename, 'r') as general_file, open(examined_filename, 'r') as examined_file:
         print("Open files...")
 
-        general_urls = [line[host_length:].rstrip('\n') for line in general_file]
-        examined_urls = [line[host_length:].rstrip('\n') for line in examined_file]
+        general_urls = [line.rstrip('\n') for line in general_file]
+        examined_urls = [line.rstrip('\n') for line in examined_file]
+
+        host = re.findall('^http://[^/]+/', general_urls[0])[0]
+        host_length = len(host)
+
+        general_urls = [line[host_length:] for line in general_urls]
+        examined_urls = [line[host_length:] for line in examined_urls]
 
         print("Start of parsing general urls...")
         general_parsed_urls = parse_urls(general_urls)
@@ -247,7 +252,7 @@ def main():
         clusters = fclusterdata(data_set, t=0.3, metric='jaccard', method='complete', criterion='distance')
 
         print("Generate regexps...")
-        regexps = generate_cluster_regexp(clusters, all_parsed_urls)
+        regexps = generate_cluster_regexp(clusters, all_parsed_urls, host)
 
         with open('regexps.txt', 'w') as output:
             print('Write results...')
