@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import re
 import argparse
 
@@ -106,10 +108,10 @@ def parse_urls(urls):
         parse_url = url.split('/')
 
         if parse_url[-1].endswith(flv_extension):
-            parse_url[-1] = r'[^/]+\.flv'
+            parse_url[-1] = '[^/]+\.flv'
 
         if parse_url[-1].endswith(html_extension):
-            parse_url[-1] = r'[^/]+\.html'
+            parse_url[-1] = '[^/]+\.html'
 
         if not parse_url[-1] == '':
             query = parse_query(parse_url, numerical_regexp, with_percent_regexp)
@@ -165,6 +167,7 @@ def generate_cluster_regexp(clusters, all_parsed_urls, host):
     for cluster_label in cluster_labels:
 
         cluster = all_parsed_urls[clusters == cluster_label]
+
         length = len(max(cluster, key=lambda s: len(s['pos_feature']))['pos_feature'])
         pattern = host
 
@@ -175,33 +178,31 @@ def generate_cluster_regexp(clusters, all_parsed_urls, host):
                     pattern += r'[^/]*/?'
                 if '' in segments and len(segments) == 2:
                     j = segments.index('')
-                    pattern += '(' + segments[1 - j] + '/)?'
+                    if re.findall('[^/]+\..+$', segments[1-j]):
+                        pattern += '(' + segments[1 - j] + ')?'
+                    else:
+                        pattern += '(' + segments[1 - j] + '/)?'
                 if not '' in segments:
-                    pattern += r'[^/]+/'
+                    withend = [1 for item in segments if re.findall('[^/]+\..+$', item)]
+                    if withend == len(segments):
+                        pattern += r'[^/]+'
+                    elif withend != 0:
+                        pattern += r'[^/]+/?'
+                    else:
+                        pattern += r'[^/]+/'
             else:
                 if not(i == length - 1 and segments[0] == ''):
-                    pattern += segments[0] + '/'
+                    if re.findall('[^/]+\..+$', segments[0]):
+                        pattern += segments[0]
+                    else:
+                        pattern += segments[0] + '/'
 
         params = list(set([param for url in cluster for param in url['query_feature']]))
 
-        if not '' in params:
-            pattern = pattern[:-1]
-            pattern += '\?'
-
-            if len(params) > 1:
-                r = '('
-                for s in list(permutations(params, len(params))):
-                    t = ''
-                    for q in s:
-                        t += q + '&'
-                    t = t[:-1]
-                    r += t + '|'
-                r = r[:-1] + ')'
-                pattern += r
-            else:
-                pattern += params[0]
-
-        regexps.append(pattern + '$\n')
+        if len(params) == 1 and params[0] == '':
+            regexps.append(pattern + '$\n')
+        else:
+            regexps.append(pattern + '(\?[^&]+(&[^&]+)*)?$\n')
 
     return regexps
 
@@ -249,16 +250,14 @@ def main():
         all_parsed_urls = np.array(all_parsed_urls)
 
         print("Start clustering...")
-        clusters = fclusterdata(data_set, t=0.3, metric='jaccard', method='complete', criterion='distance')
+        clusters = fclusterdata(data_set, t=0.2, metric='jaccard', method='complete', criterion='distance')
 
         print("Generate regexps...")
         regexps = generate_cluster_regexp(clusters, all_parsed_urls, host)
 
-        with open('regexps.txt', 'w') as output:
-            print('Write results...')
-            output.writelines(regexps)
-            output.flush()
-
+    with open('regexps.txt', 'w') as output:
+        print('Write results...')
+        output.writelines(regexps)
 
 if __name__ == '__main__':
     main()
